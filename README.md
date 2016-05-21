@@ -6,3 +6,5 @@ This project contains
 dvrMain.cpp - The main service file, that holds most of the threading and logic.
 confXmlReader.cpp  - The configuration file reader.
 dvrSql.cpp - The database connection and operation file.
+
+Adding to git.
