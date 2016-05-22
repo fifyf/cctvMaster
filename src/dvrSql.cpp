@@ -8,9 +8,6 @@
 
 #include "dvrmain.h"
 
-#define ALERT_FIELDS "(n_date, n_time, ch_id, message) values"
-#define CRITICAL_FIELDS "(n_date, n_time, ch_id, message, alert_id) values"
-
 dvrClient *gdvrList;
 MYSQL *gconn;
 
