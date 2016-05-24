@@ -181,6 +181,8 @@ while (!g_stopPing) {
 			flag=1;
 		}
 		if((repeatCounter == 0) && (flag == 1)) {
+			tmpdvr->pingFails++;;
+			if(tmpdvr->pingFails == 1) {
 			// Fill sql table.
 			time_t t=time(NULL);
 			struct tm tt=*localtime(&t);
@@ -196,7 +198,7 @@ while (!g_stopPing) {
 					tt.tm_mon + 1, tt.tm_year + 1900, tt.tm_hour, tt.tm_min, tt.tm_sec, tmpdvr->clientName, ret);
 			printf("insert into %s %s\n", critical_table, str1);
 			insertEntry(critical_table, str1);
-			tmpdvr->pingFails=1;
+			}
 		}
 	} while(repeatCounter);
 	tmpdvr=tmpdvr->next;
@@ -229,7 +231,7 @@ while (1) {
 			snprintf(insertrow_general, 511, "%s ('%s','%s','%d','%s')", ALERT_FIELDS, date, time, info->nChannel, "SDK_EVENT_CODE_LOCAL_ALARM");
 			rowno = insertEntry(who->clientName, insertrow_general);
 			snprintf(insertrow_general, 511, "%s ('%s','%s','%d','%s', '%s', '%d')", CRITICAL_FIELDS, date, time, info->nChannel, "SDK_EVENT_CODE_LOCAL_ALARM", who->clientName, rowno);
-			insertEntry(critical_table, insertrow_critical);
+			insertEntry(critical_table, insertrow_general);
 		}
 		else if(who->alert | alert_local_alarm) {
 			snprintf(insertrow_general, 511, "%s ('%s','%s','%d','%s'", ALERT_FIELDS, date, time, info->nChannel, "SDK_EVENT_CODE_LOCAL_ALARM");
@@ -241,7 +243,7 @@ while (1) {
 			snprintf(insertrow_general, 511, "%s ('%s','%s','%d','%s')", ALERT_FIELDS, date, time, info->nChannel, "SDK_EVENT_CODE_NET_ALARM");
 			rowno = insertEntry(who->clientName, insertrow_general);
 			snprintf(insertrow_general, 511, "%s ('%s','%s','%d','%s', '%s', '%d')", CRITICAL_FIELDS, date, time, info->nChannel, "SDK_EVENT_CODE_NET_ALARM", who->clientName, rowno);
-			insertEntry(critical_table, insertrow_critical);
+			insertEntry(critical_table, insertrow_general);
 		}
 		else if(who->alert | alert_net_alarm) {
 			snprintf(insertrow_general, 511, "%s ('%s','%s','%d','%s'", ALERT_FIELDS, date, time, info->nChannel, "SDK_EVENT_CODE_NET_ALARM");
@@ -253,7 +255,7 @@ while (1) {
 			snprintf(insertrow_general, 511, "%s ('%s','%s','%d','%s')", ALERT_FIELDS, date, time, info->nChannel, "SDK_EVENT_CODE_MANUAL_ALARM");
 			rowno = insertEntry(who->clientName, insertrow_general);
 			snprintf(insertrow_general, 511, "%s ('%s','%s','%d','%s', '%s', '%d')", CRITICAL_FIELDS, date, time, info->nChannel, "SDK_EVENT_CODE_MANUAL_ALARM", who->clientName, rowno);
-			insertEntry(critical_table, insertrow_critical);
+			insertEntry(critical_table, insertrow_general);
 		}
 		else if(who->alert | alert_manual_alarm){
 			snprintf(insertrow_general, 511, "%s ('%s','%s','%d','%s'", ALERT_FIELDS, date, time, info->nChannel, "SDK_EVENT_CODE_MANUAL_ALARM");
@@ -265,7 +267,7 @@ while (1) {
 			snprintf(insertrow_general, 511, "%s ('%s','%s','%d','%s')", ALERT_FIELDS, date, time, info->nChannel, "SDK_EVENT_CODE_VIDEO_MOTION");
 			rowno = insertEntry(who->clientName, insertrow_general);
 			snprintf(insertrow_general, 511, "%s ('%s','%s','%d','%s', '%s', '%d')", CRITICAL_FIELDS, date, time, info->nChannel, "SDK_EVENT_CODE_VIDEO_MOTION", who->clientName, rowno);
-			insertEntry(critical_table, insertrow_critical);
+			insertEntry(critical_table, insertrow_general);
 		}
 		else if(who->alert | alert_video_motion){
 			snprintf(insertrow_general, 511, "%s ('%s','%s','%d','%s'", ALERT_FIELDS, date, time, info->nChannel, "SDK_EVENT_CODE_VIDEO_MOTION");
@@ -277,7 +279,7 @@ while (1) {
 			snprintf(insertrow_general, 511, "%s ('%s','%s','%d','%s')", ALERT_FIELDS, date, time, info->nChannel, "SDK_EVENT_CODE_VIDEO_LOSS");
 			rowno = insertEntry(who->clientName, insertrow_general);
 			snprintf(insertrow_general, 511, "%s ('%s','%s','%d','%s', '%s', '%d')", CRITICAL_FIELDS, date, time, info->nChannel, "SDK_EVENT_CODE_VIDEO_LOSS", who->clientName, rowno);
-			insertEntry(critical_table, insertrow_critical);
+			insertEntry(critical_table, insertrow_general);
 		}
 		else if(who->alert | alert_video_loss) {
 			snprintf(insertrow_general, 511, "%s ('%s','%s','%d','%s'", ALERT_FIELDS, date, time, info->nChannel, "SDK_EVENT_CODE_VIDEO_LOSS");
@@ -289,7 +291,7 @@ while (1) {
 			snprintf(insertrow_general, 511, "%s ('%s','%s','%d','%s')", ALERT_FIELDS, date, time, info->nChannel, "SDK_EVENT_CODE_VIDEO_BLIND");
 			rowno = insertEntry(who->clientName, insertrow_general);
 			snprintf(insertrow_general, 511, "%s ('%s','%s','%d','%s', '%s', '%d')", CRITICAL_FIELDS, date, time, info->nChannel, "SDK_EVENT_CODE_VIDEO_BLIND", who->clientName, rowno);
-			insertEntry(critical_table, insertrow_critical);
+			insertEntry(critical_table, insertrow_general);
 		}
 		else if(who->alert | alert_video_blind) {
 			snprintf(insertrow_general, 511, "%s ('%s','%s','%d','%s'", ALERT_FIELDS, date, time, info->nChannel, "SDK_EVENT_CODE_VIDEO_BLIND");
@@ -301,7 +303,7 @@ while (1) {
 			snprintf(insertrow_general, 511, "%s ('%s','%s','%d','%s')", ALERT_FIELDS, date, time, info->nChannel, "SDK_EVENT_CODE_VIDEO_TITLE");
 			rowno = insertEntry(who->clientName, insertrow_general);
 			snprintf(insertrow_general, 511, "%s ('%s','%s','%d','%s', '%s', '%d')", CRITICAL_FIELDS, date, time, info->nChannel, "SDK_EVENT_CODE_VIDEO_TITLE", who->clientName, rowno);
-			insertEntry(critical_table, insertrow_critical);
+			insertEntry(critical_table, insertrow_general);
 		}
 		else if(who->alert | alert_video_title) {
 			snprintf(insertrow_general, 511, "%s ('%s','%s','%d','%s'", ALERT_FIELDS, date, time, info->nChannel, "SDK_EVENT_CODE_VIDEO_TITLE");
@@ -313,7 +315,7 @@ while (1) {
 			snprintf(insertrow_general, 511, "%s ('%s','%s','%d','%s')", ALERT_FIELDS, date, time, info->nChannel, "SDK_EVENT_CODE_VIDEO_SPLIT");
 			rowno = insertEntry(who->clientName, insertrow_general);
 			snprintf(insertrow_general, 511, "%s ('%s','%s','%d','%s', '%s', '%d')", CRITICAL_FIELDS, date, time, info->nChannel, "SDK_EVENT_CODE_VIDEO_SPLIT", who->clientName, rowno);
-			insertEntry(critical_table, insertrow_critical);
+			insertEntry(critical_table, insertrow_general);
 		}
 		else if(who->alert | alert_video_split) {
 			snprintf(insertrow_general, 511, "%s ('%s','%s','%d','%s'", ALERT_FIELDS, date, time, info->nChannel, "SDK_EVENT_CODE_VIDEO_SPLIT");
@@ -325,7 +327,7 @@ while (1) {
 			snprintf(insertrow_general, 511, "%s ('%s','%s','%d','%s')", ALERT_FIELDS, date, time, info->nChannel, "SDK_EVENT_CODE_VIDEO_TOUR");
 			rowno = insertEntry(who->clientName, insertrow_general);
 			snprintf(insertrow_general, 511, "%s ('%s','%s','%d','%s', '%s', '%d')", CRITICAL_FIELDS, date, time, info->nChannel, "SDK_EVENT_CODE_VIDEO_TOUR", who->clientName, rowno);
-			insertEntry(critical_table, insertrow_critical);
+			insertEntry(critical_table, insertrow_general);
 		}
 		else if(who->alert | alert_video_tour) {
 			snprintf(insertrow_general, 511, "%s ('%s','%s','%d','%s'", ALERT_FIELDS, date, time, info->nChannel, "SDK_EVENT_CODE_VIDEO_TOUR");
@@ -337,7 +339,7 @@ while (1) {
 			snprintf(insertrow_general, 511, "%s ('%s','%s','%d','%s')", ALERT_FIELDS, date, time, info->nChannel, "SDK_EVENT_CODE_STORAGE_NOT_EXIST");
 			rowno = insertEntry(who->clientName, insertrow_general);
 			snprintf(insertrow_general, 511, "%s ('%s','%s','%d','%s', '%s', '%d')", CRITICAL_FIELDS, date, time, info->nChannel, "SDK_EVENT_CODE_STORAGE_NOT_EXIST", who->clientName, rowno);
-			insertEntry(critical_table, insertrow_critical);
+			insertEntry(critical_table, insertrow_general);
 		}
 		else if(who->alert | alert_storage_not_exist) {
 			snprintf(insertrow_general, 511, "%s ('%s','%s','%d','%s'", ALERT_FIELDS, date, time, info->nChannel, "SDK_EVENT_CODE_STORAGE_NOT_EXIST");
@@ -349,7 +351,7 @@ while (1) {
 			snprintf(insertrow_general, 511, "%s ('%s','%s','%d','%s')", ALERT_FIELDS, date, time, info->nChannel, "SDK_EVENT_CODE_STORAGE_FAILURE");
 			rowno = insertEntry(who->clientName, insertrow_general);
 			snprintf(insertrow_general, 511, "%s ('%s','%s','%d','%s', '%s', '%d')", CRITICAL_FIELDS, date, time, info->nChannel, "SDK_EVENT_CODE_STORAGE_FAILURE", who->clientName, rowno);
-			insertEntry(critical_table, insertrow_critical);
+			insertEntry(critical_table, insertrow_general);
 		}
 		else if(who->alert | alert_storage_failure) {
 			snprintf(insertrow_general, 511, "%s ('%s','%s','%d','%s'", ALERT_FIELDS, date, time, info->nChannel, "SDK_EVENT_CODE_STORAGE_FAILURE");
@@ -361,7 +363,7 @@ while (1) {
 			snprintf(insertrow_general, 511, "%s ('%s','%s','%d','%s')", ALERT_FIELDS, date, time, info->nChannel, "SDK_EVENT_CODE_LOW_SPACE");
 			rowno = insertEntry(who->clientName, insertrow_general);
 			snprintf(insertrow_general, 511, "%s ('%s','%s','%d','%s', '%s', '%d')", CRITICAL_FIELDS, date, time, info->nChannel, "SDK_EVENT_CODE_LOW_SPACE", who->clientName, rowno);
-			insertEntry(critical_table, insertrow_critical);
+			insertEntry(critical_table, insertrow_general);
 		}
 		else if(who->alert | alert_low_space) {
 			snprintf(insertrow_general, 511, "%s ('%s','%s','%d','%s'", ALERT_FIELDS, date, time, info->nChannel, "SDK_EVENT_CODE_LOW_SPACE");
@@ -373,7 +375,7 @@ while (1) {
 			snprintf(insertrow_general, 511, "%s ('%s','%s','%d','%s')", ALERT_FIELDS, date, time, info->nChannel, "SDK_EVENT_CODE_NET_ABORT");
 			rowno = insertEntry(who->clientName, insertrow_general);
 			snprintf(insertrow_general, 511, "%s ('%s','%s','%d','%s', '%s', '%d')", CRITICAL_FIELDS, date, time, info->nChannel, "SDK_EVENT_CODE_NET_ABORT", who->clientName, rowno);
-			insertEntry(critical_table, insertrow_critical);
+			insertEntry(critical_table, insertrow_general);
 		}
 		else if(who->alert | alert_net_abort) {
 			snprintf(insertrow_general, 511, "%s ('%s','%s','%d','%s'", ALERT_FIELDS, date, time, info->nChannel, "SDK_EVENT_CODE_NET_ABORT");
@@ -385,7 +387,7 @@ while (1) {
 			snprintf(insertrow_general, 511, "%s ('%s','%s','%d','%s')", ALERT_FIELDS, date, time, info->nChannel, "SDK_EVENT_CODE_COMM");
 			rowno = insertEntry(who->clientName, insertrow_general);
 			snprintf(insertrow_general, 511, "%s ('%s','%s','%d','%s', '%s', '%d')", CRITICAL_FIELDS, date, time, info->nChannel, "SDK_EVENT_CODE_COMM", who->clientName, rowno);
-			insertEntry(critical_table, insertrow_critical);
+			insertEntry(critical_table, insertrow_general);
 		}
 		else if(who->alert | alert_comm) {
 			snprintf(insertrow_general, 511, "%s ('%s','%s','%d','%s'", ALERT_FIELDS, date, time, info->nChannel, "SDK_EVENT_CODE_COMM");
@@ -397,7 +399,7 @@ while (1) {
 			snprintf(insertrow_general, 511, "%s ('%s','%s','%d','%s')", ALERT_FIELDS, date, time, info->nChannel, "SDK_EVENT_CODE_STORAGE_READ_ERROR");
 			rowno = insertEntry(who->clientName, insertrow_general);
 			snprintf(insertrow_general, 511, "%s ('%s','%s','%d','%s', '%s', '%d')", CRITICAL_FIELDS, date, time, info->nChannel, "SDK_EVENT_CODE_STORAGE_READ_ERROR", who->clientName, rowno);
-			insertEntry(critical_table, insertrow_critical);
+			insertEntry(critical_table, insertrow_general);
 		}
 		else if(who->alert | alert_storage_read_error) {
 			snprintf(insertrow_general, 511, "%s ('%s','%s','%d','%s'", ALERT_FIELDS, date, time, info->nChannel, "SDK_EVENT_CODE_STORAGE_READ_ERROR");
@@ -409,7 +411,7 @@ while (1) {
 			snprintf(insertrow_general, 511, "%s ('%s','%s','%d','%s')", ALERT_FIELDS, date, time, info->nChannel, "SDK_EVENT_CODE_STORAGE_WRITE_ERROR");
 			rowno = insertEntry(who->clientName, insertrow_general);
 			snprintf(insertrow_general, 511, "%s ('%s','%s','%d','%s', '%s', '%d')", CRITICAL_FIELDS, date, time, info->nChannel, "SDK_EVENT_CODE_STORAGE_WRITE_ERROR", who->clientName, rowno);
-			insertEntry(critical_table, insertrow_critical);
+			insertEntry(critical_table, insertrow_general);
 		}
 		else if(who->alert | alert_storage_write_error){
 			snprintf(insertrow_general, 511, "%s ('%s','%s','%d','%s'", ALERT_FIELDS, date, time, info->nChannel, "SDK_EVENT_CODE_STORAGE_WRITE_ERROR");
@@ -421,7 +423,7 @@ while (1) {
 			snprintf(insertrow_general, 511, "%s ('%s','%s','%d','%s')", ALERT_FIELDS, date, time, info->nChannel, "SDK_EVENT_CODE_NET_IPCONFLICT");
 			rowno = insertEntry(who->clientName, insertrow_general);
 			snprintf(insertrow_general, 511, "%s ('%s','%s','%d','%s', '%s', '%d')", CRITICAL_FIELDS, date, time, info->nChannel, "SDK_EVENT_CODE_NET_IPCONFLICT", who->clientName, rowno);
-			insertEntry(critical_table, insertrow_critical);
+			insertEntry(critical_table, insertrow_general);
 		}
 		else if(who->alert | alert_net_ipconflict){
 			snprintf(insertrow_general, 511, "%s ('%s','%s','%d','%s'", ALERT_FIELDS, date, time, info->nChannel, "SDK_EVENT_CODE_NET_IPCONFLICT");
@@ -433,7 +435,7 @@ while (1) {
 			snprintf(insertrow_general, 511, "%s ('%s','%s','%d','%s')", ALERT_FIELDS, date, time, info->nChannel, "SDK_EVENT_CODE_ALARM_EMERGENCY");
 			rowno = insertEntry(who->clientName, insertrow_general);
 			snprintf(insertrow_general, 511, "%s ('%s','%s','%d','%s', '%s', '%d')", CRITICAL_FIELDS, date, time, info->nChannel, "SDK_EVENT_CODE_ALARM_EMERGENCY", who->clientName, rowno);
-			insertEntry(critical_table, insertrow_critical);
+			insertEntry(critical_table, insertrow_general);
 		}
 		else if(who->alert | alert_alarm_emergency){
 			snprintf(insertrow_general, 511, "%s ('%s','%s','%d','%s'", ALERT_FIELDS, date, time, info->nChannel, "SDK_EVENT_CODE_ALARM_EMERGENCY");
@@ -445,7 +447,7 @@ while (1) {
 			snprintf(insertrow_general, 511, "%s ('%s','%s','%d','%s')", ALERT_FIELDS, date, time, info->nChannel, "SDK_EVENT_CODE_DEC_CONNECT");
 			rowno = insertEntry(who->clientName, insertrow_general);
 			snprintf(insertrow_general, 511, "%s ('%s','%s','%d','%s', '%s', '%d')", CRITICAL_FIELDS, date, time, info->nChannel, "SDK_EVENT_CODE_DEC_CONNECT", who->clientName, rowno);
-			insertEntry(critical_table, insertrow_critical);
+			insertEntry(critical_table, insertrow_general);
 		}
 		else if(who->alert | alert_dec_connect) {
 			snprintf(insertrow_general, 511, "%s ('%s','%s','%d','%s'", ALERT_FIELDS, date, time, info->nChannel, "SDK_EVENT_CODE_DEC_CONNECT");
@@ -457,7 +459,7 @@ while (1) {
 			snprintf(insertrow_general, 511, "%s ('%s','%s','%d','%s')", ALERT_FIELDS, date, time, info->nChannel, "SDK_EVENT_CODE_VideoAnalyze");
 			rowno = insertEntry(who->clientName, insertrow_general);
 			snprintf(insertrow_general, 511, "%s ('%s','%s','%d','%s', '%s', '%d')", CRITICAL_FIELDS, date, time, info->nChannel, "SDK_EVENT_CODE_VideoAnalyze", who->clientName, rowno);
-			insertEntry(critical_table, insertrow_critical);
+			insertEntry(critical_table, insertrow_general);
 		}
 		else if(who->alert | alert_videoanalyze){
 			snprintf(insertrow_general, 511, "%s ('%s','%s','%d','%s'", ALERT_FIELDS, date, time, info->nChannel, "SDK_EVENT_CODE_VideoAnalyze");
