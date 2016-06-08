@@ -568,10 +568,8 @@ return NULL;
 
 dvrClient * findbyipaddress(char *ipaddress) {
 dvrClient *tmp = gdvrList;
-unsigned int ip_num;
-inet_aton(ipaddress, (struct in_addr *)&ip_num);
 	while(tmp != NULL) {
-		if(tmp->ipaddr == ip_num)
+		if((strncmp(tmp->ipaddress, ipaddress, strlen(ipaddress))) == 0)
 			return tmp;
 		tmp=tmp->next;
 	}

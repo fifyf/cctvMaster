@@ -45,8 +45,12 @@ printf("%s:%d\n", __FUNCTION__, __LINE__);
 	snprintf(specific_query, 511, "%s where ipaddress='%s'", basic_query, ipaddress);
 printf("%s:%d %s \n", __FUNCTION__, __LINE__, specific_query);
 	mysqlStatus = mysql_query(gconn, specific_query);
-printf("%s:%d\n", __FUNCTION__, __LINE__);
 	telt = findbyipaddress(ipaddress);
+printf("%s:%d %x\n", __FUNCTION__, __LINE__, telt);
+if(telt != NULL)
+printf("%s:%d %x\n", __FUNCTION__, __LINE__, telt);
+else
+printf("%s:%d\n", __FUNCTION__, __LINE__);
 	foundClient=1;
 } else {
 	mysqlStatus = mysql_query(gconn, basic_query);
@@ -64,6 +68,7 @@ if(res) {
 			telt=(dvrClient *)malloc(sizeof(dvrClient));
 			memset(telt, 0, sizeof(dvrClient));
 		}
+		telt->alert=telt->critical=0;
 		field_count=0;
 		while(field_count < mysql_field_count(gconn)) {
 		switch(field_count) {
@@ -421,6 +426,7 @@ if(res) {
 				memset(telt, 0, sizeof(dvrchangeconf));
 			}
 			if(strncmp(row[1], "REFRESH_IP", strlen("REFRESH_IP"))) {
+				field_count=0;
 				while(field_count < mysql_field_count(gconn)) {
 				switch(field_count) {
 				case 0:
@@ -439,6 +445,7 @@ printf("%s:%d %s", __FUNCTION__,__LINE__,row[field_count]);
 				field_count++;
 				}
 			} else if(strncmp(row[1], "DOWNLOAD", strlen("DOWNLOAD"))) {
+				field_count=0;
 				while(field_count < mysql_field_count(gconn)) {
 				switch(field_count) {
 				case 0:
