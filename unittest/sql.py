@@ -1,6 +1,18 @@
 #!/usr/bin/python
 
+import sys
 import MySQLdb
+
+option=1;
+if ( len(sys.argv) > 2 ):
+	print "Improper arguments"
+	sys.exit(1)
+
+if ( len(sys.argv) == 2 ):
+	if ( str(sys.argv[1]) == "DEL" ):
+		option=2;
+	elif ( str(sys.argv[1]) == "ADD" ):
+		option=0;
 
 # Open database connection
 db = MySQLdb.connect("192.168.1.6","nanotech","nanotech","nanotechdb" )
@@ -37,7 +49,7 @@ for row in results:
 
 print "newvideomotion = %s" % newvideomotion
 
-sql="insert into changeconf (commandName, attribute1, attribute2) values ('REFRESH_IP', '%s', '1')" %ipaddr;
+sql="insert into changeconf (commandName, attribute1, attribute2) values ('REFRESH_IP', '%s', '%s')" % (ipaddr, option);
 
 print "%s" % sql;
 cursor.execute(sql);

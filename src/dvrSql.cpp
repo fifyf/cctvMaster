@@ -40,18 +40,14 @@ int atoi_=0;
 char *basic_query="select clientName,ipaddress,ipaddr,port,userName,password,local_alarm,net_alarm,manual_alarm,video_motion,video_loss,video_blind,video_title,video_split,video_tour,storage_not_exist,storage_failure,low_space,net_abort,comm,storage_read_error,storage_write_error,net_ipconflict,alarm_emergency,dec_connect,videoanalyze,camera_ports,camera_connected from configuration";
 
 if(ipaddress) {
-printf("%s:%d\n", __FUNCTION__, __LINE__);
 	memset(specific_query,0,512);
 	snprintf(specific_query, 511, "%s where ipaddress='%s'", basic_query, ipaddress);
-printf("%s:%d %s \n", __FUNCTION__, __LINE__, specific_query);
 	mysqlStatus = mysql_query(gconn, specific_query);
 	telt = findbyipaddress(ipaddress);
-printf("%s:%d %x\n", __FUNCTION__, __LINE__, telt);
-if(telt != NULL)
-printf("%s:%d %x\n", __FUNCTION__, __LINE__, telt);
-else
-printf("%s:%d\n", __FUNCTION__, __LINE__);
-	foundClient=1;
+	if(telt != NULL) {
+		telt->delEntry=1;
+		telt=NULL;
+	}
 } else {
 	mysqlStatus = mysql_query(gconn, basic_query);
 }
@@ -68,7 +64,6 @@ if(res) {
 			telt=(dvrClient *)malloc(sizeof(dvrClient));
 			memset(telt, 0, sizeof(dvrClient));
 		}
-		telt->alert=telt->critical=0;
 		field_count=0;
 		while(field_count < mysql_field_count(gconn)) {
 		switch(field_count) {
@@ -383,6 +378,7 @@ if(res) {
 		if(ipaddress && foundClient) {
 			foundClient=0;
 		} else {
+			pthread_mutex_lock(&gdvrlistaddmutex);
 			if(gdvrList == NULL) {
 				telt->next = gdvrList;
 				gdvrList=telt;
@@ -391,6 +387,7 @@ if(res) {
 				telt->next = gdvrList;
 				gdvrList=telt;
 			}
+			pthread_mutex_unlock(&gdvrlistaddmutex);
 		}
 		telt=NULL;
 	}
@@ -408,7 +405,7 @@ MYSQL_ROW row;
 int mysqlStatus;
 int rowstart=-1;
 int rowend=-1;
-char *basic_query="select itr, commandName, attribute1, attribute1, attribute2, attribute3, attribute4, attribute5, attribute6, attribute7 from changeconf";
+char *basic_query="select itr, commandName,attribute1,attribute2,attribute3,attribute4,attribute5,attribute6,attribute7 from changeconf";
 
 mysqlStatus = mysql_query(gconn, basic_query);
 if(mysqlStatus == 0) {
@@ -425,16 +422,18 @@ if(res) {
 				telt=(dvrchangeconf *)malloc(sizeof(dvrchangeconf));
 				memset(telt, 0, sizeof(dvrchangeconf));
 			}
-			if(strncmp(row[1], "REFRESH_IP", strlen("REFRESH_IP"))) {
+			if(strncmp(row[1], "REFRESH_IP", strlen("REFRESH_IP")) == 0) {
 				field_count=0;
 				while(field_count < mysql_field_count(gconn)) {
 				switch(field_count) {
 				case 0:
 					rowend=atoi(row[field_count]);
 					break;
+				case 1:
+					telt->type=REFRESH_IP;
+					break;
 				case 2:
 					strncpy(telt->confEntry.alterconf.ipaddr, row[field_count], strlen(row[field_count]));
-printf("%s:%d %s", __FUNCTION__,__LINE__,row[field_count]);
 					break;
 				case 3:
 					telt->confEntry.alterconf.action = atoi(row[field_count]);
@@ -444,12 +443,15 @@ printf("%s:%d %s", __FUNCTION__,__LINE__,row[field_count]);
 				}
 				field_count++;
 				}
-			} else if(strncmp(row[1], "DOWNLOAD", strlen("DOWNLOAD"))) {
+			} else if(strncmp(row[1], "DOWNLOAD", strlen("DOWNLOAD")) == 0) {
 				field_count=0;
 				while(field_count < mysql_field_count(gconn)) {
 				switch(field_count) {
 				case 0:
 					rowend=atoi(row[field_count]);
+					break;
+				case 1:
+					telt->type=DOWNLOAD;
 					break;
 				case 2:
 					strncpy(telt->confEntry.download.ipaddr, row[field_count], strlen(row[field_count]));

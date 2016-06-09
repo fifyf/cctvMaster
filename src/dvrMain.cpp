@@ -35,6 +35,7 @@ char *buf;
 
 pthread_mutex_t alarmmutex=PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t gdvrlistmutex=PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t gdvrlistaddmutex=PTHREAD_MUTEX_INITIALIZER;
 
 typedef struct alarmList {
 holdAlarm *head;
@@ -42,6 +43,8 @@ holdAlarm *tail;
 }alarmList;
 
 alarmList alarmList_;
+
+bool alarmCallBack(long int loginid, char *pBuf, unsigned long dwBufLen, long dwuser);
 
 void AddToTail(alarmList *list, holdAlarm *node) {
 pthread_mutex_lock(&alarmmutex);
@@ -67,21 +70,68 @@ pthread_mutex_unlock(&alarmmutex);
 return (void *)node;
 }
 
-int daemonize()
+void initClient(dvrClient *clnt)
+{
+int error=0;
+printf("%s:%d\n", __FUNCTION__, __LINE__);
+	if(clnt->loginId) {
+	// Being done to cleanup the existing client.
+		H264_DVR_CloseAlarmChan(clnt->loginId);
+		H264_DVR_Logout(clnt->loginId);
+	}
+printf("%s:%d clnt->ipaddress : %s, clnt->port : %d, clnt->userName : %s, clnt->password : %s\n", __FUNCTION__, __LINE__, clnt->ipaddress, clnt->port, clnt->userName, clnt->password);
+
+	clnt->loginId=H264_DVR_LoginEx((char *)clnt->ipaddress, (int)clnt->port, (char *)clnt->userName, (char *)""/*clnt->password*/, &clnt->devInfo, 6, &error);
+printf("%s:%d\n", __FUNCTION__, __LINE__);
+	if (clnt->loginId <= 0) {
+printf("%s:%d Login Id : %d\n", __FUNCTION__, __LINE__, clnt->loginId);
+			time_t t=time(NULL);
+			struct tm tt=*localtime(&t);
+			char str[256];
+			char str1[512];
+			snprintf(str, 255, "%s ('%d-%d-%d', '%d:%d:%d', -1, 'Unable to login')", ALERT_FIELDS, tt.tm_mday, 
+					tt.tm_mon + 1, tt.tm_year + 1900, tt.tm_hour, tt.tm_min, tt.tm_sec);
+			long ret=insertEntry(clnt->clientName, str);
+			snprintf(str1, 255, "%s ('%d-%d-%d', '%d:%d:%d', -1, 'Unable to login', %s, '%d')", CRITICAL_FIELDS, tt.tm_mday, 
+					tt.tm_mon + 1, tt.tm_year + 1900, tt.tm_hour, tt.tm_min, tt.tm_sec, clnt->clientName, ret);
+			insertEntry(critical_table, str1);
+	} else {
+printf("%s:%d\n", __FUNCTION__, __LINE__);
+		H264_DVR_SetDVRMessCallBack(alarmCallBack, clnt->loginId);
+		H264_DVR_SetupAlarmChan(clnt->loginId);
+	}
+}
+
+void clearClient(dvrClient *clnt)
+{
+int error=0;
+printf("%s:%d\n", __FUNCTION__, __LINE__);
+// Being done to cleanup the existing client.
+H264_DVR_CloseAlarmChan(clnt->loginId);
+H264_DVR_Logout(clnt->loginId);
+}
+
+int daemonize_1()
 {
 int fd;
 int read_fd;
 FILE *pidfile=NULL;
+char buffer[64] = {0};
+
+int pid=fork();
+
+if (pid<0) exit(1); /* fork error */
+
+if (pid>0) exit(0); /* parent exits */
 
 if ((dvrgconf.dvr_sid=setsid()) < 0) {
 	printf("daemonize failed to set sid\n");
 	return EFAILURE;
 }
-
+#if 1
 if((fd = access(DVR_LOCK_FILE, F_OK|W_OK)) == ESUCCESS) {
 	if ( EFAILURE!= (read_fd = open ( DVR_LOCK_FILE , O_RDONLY )) )
 	{
-	   char buffer[64] = {0};
 	   struct stat file_info = {0};
 	   int length = 0;
                 /* Get information about the file.  */
@@ -106,7 +156,6 @@ if((fd = access(DVR_LOCK_FILE, F_OK|W_OK)) == ESUCCESS) {
 	  }
 	}
 }
-
 	if (NULL ==(pidfile = fopen(DVR_LOCK_FILE, "w"))) {
 	    	printf( "Cannot open file %s", DVR_LOCK_FILE );
 	    	return EFAILURE;
@@ -131,6 +180,7 @@ if((fd = access(DVR_LOCK_FILE, F_OK|W_OK)) == ESUCCESS) {
           printf("Could not redirect stdout, stderr, stdin - proceeding nontheless\n");
         }
 
+#endif
 return ESUCCESS;
 }
 
@@ -159,6 +209,7 @@ while (!g_stopPing) {
 			tmpdvr=gdvrList;
 	}
 	if (tmpdvr->delEntry) {
+		pthread_mutex_lock(&gdvrlistaddmutex);
 		if(tmpdvr == gdvrList) {
 			gdvrList=tmpdvr->next;
 			free(tmpdvr);
@@ -166,6 +217,7 @@ while (!g_stopPing) {
 			prevdvr->next=tmpdvr->next;
 			free(tmpdvr);
 		}
+		pthread_mutex_unlock(&gdvrlistaddmutex);
 	}
 	memset(pingString,0,255);
 	snprintf(pingString, 255, "%s %s %s >> /dev/null", ping, "-w 3", tmpdvr->ipaddress);
@@ -201,7 +253,6 @@ while (!g_stopPing) {
 			}
 		}
 	} while(repeatCounter);
-	tmpdvr=tmpdvr->next;
 }
 
 }
@@ -480,15 +531,26 @@ void * pollconf(void *)
 int confCount=0;
 dvrchangeconf *confHead = NULL;
 dvrchangeconf *nodetofree = NULL;
+dvrClient *tmp=NULL;
 while (1) {
 	if((confCount=readChangeConf(&confHead)) != 0) {
-printf("%s:%d\n", __FUNCTION__, __LINE__);
 		while(confCount > 0) {
-printf("%s:%d\n", __FUNCTION__, __LINE__);
 			if (confHead->type == REFRESH_IP) {
 printf("%s:%d ipaddress : %s\n", __FUNCTION__, __LINE__,confHead->confEntry.alterconf.ipaddr);
-				// Case for locking
-				readDB_updateConf(confHead->confEntry.alterconf.ipaddr);
+				if( confHead->confEntry.alterconf.action == DELETE) {
+					tmp = findbyipaddress(confHead->confEntry.alterconf.ipaddr);
+					if(tmp) {
+						clearClient(tmp);
+						tmp->delEntry = 1;
+					}
+				} else {
+					// Case for locking
+					readDB_updateConf(confHead->confEntry.alterconf.ipaddr);
+					tmp = findbyipaddress(confHead->confEntry.alterconf.ipaddr);
+					if(tmp) {
+						initClient(tmp);
+					}
+				}
 			} else if (confHead->type == DOWNLOAD) {
 				//Not implemented.
 			}
@@ -524,37 +586,6 @@ printf("%s:%d t=%d, f=%d\n", __FUNCTION__, __LINE__, true, false);
 return true;
 }
 
-void initClient(dvrClient *clnt)
-{
-int error=0;
-printf("%s:%d\n", __FUNCTION__, __LINE__);
-	if(clnt->loginId) {
-	// Being done to cleanup the existing client.
-		H264_DVR_CloseAlarmChan(clnt->loginId);
-		H264_DVR_Logout(clnt->loginId);
-	}
-printf("%s:%d clnt->ipaddress : %s, clnt->port : %d, clnt->userName : %s, clnt->password : %s\n", __FUNCTION__, __LINE__, clnt->ipaddress, clnt->port, clnt->userName, clnt->password);
-
-	clnt->loginId=H264_DVR_LoginEx((char *)clnt->ipaddress, (int)clnt->port, (char *)clnt->userName, (char *)""/*clnt->password*/, &clnt->devInfo, 6, &error);
-printf("%s:%d\n", __FUNCTION__, __LINE__);
-	if (clnt->loginId <= 0) {
-printf("%s:%d Login Id : %d\n", __FUNCTION__, __LINE__, clnt->loginId);
-			time_t t=time(NULL);
-			struct tm tt=*localtime(&t);
-			char str[256];
-			char str1[512];
-			snprintf(str, 255, "%s ('%d-%d-%d', '%d:%d:%d', -1, 'Unable to login')", ALERT_FIELDS, tt.tm_mday, 
-					tt.tm_mon + 1, tt.tm_year + 1900, tt.tm_hour, tt.tm_min, tt.tm_sec);
-			long ret=insertEntry(clnt->clientName, str);
-			snprintf(str1, 255, "%s ('%d-%d-%d', '%d:%d:%d', -1, 'Unable to login', %s, '%d')", CRITICAL_FIELDS, tt.tm_mday, 
-					tt.tm_mon + 1, tt.tm_year + 1900, tt.tm_hour, tt.tm_min, tt.tm_sec, clnt->clientName, ret);
-			insertEntry(critical_table, str1);
-	} else {
-printf("%s:%d\n", __FUNCTION__, __LINE__);
-		H264_DVR_SetDVRMessCallBack(alarmCallBack, clnt->loginId);
-		H264_DVR_SetupAlarmChan(clnt->loginId);
-	}
-}
 
 dvrClient * findbyloginid(long int loginid) {
 dvrClient *tmp = gdvrList;
@@ -593,11 +624,11 @@ int main()
 pthread_t ping_thread;
 pthread_t processAlarm_thread;
 pthread_t pollconf_thread;
-/*
-	if(daemonize != 0) {
+#if 1
+	if(daemonize_1() != ESUCCESS) {
 		return EFAILURE;
 	}
-*/
+#endif
 printf("%s:%d\n", __FUNCTION__, __LINE__);
 	if (ESUCCESS != readXmlConf(DVR_XML_CONF_FILE)) {
 		return EFAILURE;
