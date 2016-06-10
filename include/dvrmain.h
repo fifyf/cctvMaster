@@ -73,7 +73,7 @@ typedef struct dvrClient{
 }dvrClient;
 
 typedef enum confType {
-REFRESH_IP,
+REFRESH_IP=1,
 DOWNLOAD
 }confType;
 
@@ -85,7 +85,7 @@ int duration; //download video length, default 2 mins.
 }downloadconf;
 
 typedef enum confaction {
-ADD,
+ADD=0,
 MODIFY,
 DELETE
 }confaction;
@@ -113,6 +113,7 @@ extern dvrDbConf dbconf;
 extern dvr_g_conf dvrgconf;
 extern dvrClient *dvrClientList;
 extern pthread_mutex_t gdvrlistmutex;
+extern pthread_mutex_t gdvrlistaddmutex;
 #endif //__dbconf__
 dvrClient * findbyipaddress(char *ipaddress);
 dvrClient * findbyloginid(long int loginid);

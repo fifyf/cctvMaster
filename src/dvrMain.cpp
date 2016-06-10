@@ -35,6 +35,7 @@ char *buf;
 
 pthread_mutex_t alarmmutex=PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t gdvrlistmutex=PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t gdvrlistaddmutex=PTHREAD_MUTEX_INITIALIZER;
 
 typedef struct alarmList {
 holdAlarm *head;
@@ -42,6 +43,8 @@ holdAlarm *tail;
 }alarmList;
 
 alarmList alarmList_;
+
+bool alarmCallBack(long int loginid, char *pBuf, unsigned long dwBufLen, long dwuser);
 
 void AddToTail(alarmList *list, holdAlarm *node) {
 pthread_mutex_lock(&alarmmutex);
@@ -67,21 +70,68 @@ pthread_mutex_unlock(&alarmmutex);
 return (void *)node;
 }
 
-int daemonize()
+void initClient(dvrClient *clnt)
+{
+int error=0;
+printf("%s:%d\n", __FUNCTION__, __LINE__);
+	if(clnt->loginId) {
+	// Being done to cleanup the existing client.
+		H264_DVR_CloseAlarmChan(clnt->loginId);
+		H264_DVR_Logout(clnt->loginId);
+	}
+printf("%s:%d clnt->ipaddress : %s, clnt->port : %d, clnt->userName : %s, clnt->password : %s\n", __FUNCTION__, __LINE__, clnt->ipaddress, clnt->port, clnt->userName, clnt->password);
+
+	clnt->loginId=H264_DVR_LoginEx((char *)clnt->ipaddress, (int)clnt->port, (char *)clnt->userName, (char *)""/*clnt->password*/, &clnt->devInfo, 6, &error);
+printf("%s:%d\n", __FUNCTION__, __LINE__);
+	if (clnt->loginId <= 0) {
+printf("%s:%d Login Id : %d\n", __FUNCTION__, __LINE__, clnt->loginId);
+			time_t t=time(NULL);
+			struct tm tt=*localtime(&t);
+			char str[256];
+			char str1[512];
+			snprintf(str, 255, "%s ('%d-%d-%d', '%d:%d:%d', -1, 'Unable to login')", ALERT_FIELDS, tt.tm_mday, 
+					tt.tm_mon + 1, tt.tm_year + 1900, tt.tm_hour, tt.tm_min, tt.tm_sec);
+			long ret=insertEntry(clnt->clientName, str);
+			snprintf(str1, 255, "%s ('%d-%d-%d', '%d:%d:%d', -1, 'Unable to login', %s, '%d')", CRITICAL_FIELDS, tt.tm_mday, 
+					tt.tm_mon + 1, tt.tm_year + 1900, tt.tm_hour, tt.tm_min, tt.tm_sec, clnt->clientName, ret);
+			insertEntry(critical_table, str1);
+	} else {
+printf("%s:%d\n", __FUNCTION__, __LINE__);
+		H264_DVR_SetDVRMessCallBack(alarmCallBack, clnt->loginId);
+		H264_DVR_SetupAlarmChan(clnt->loginId);
+	}
+}
+
+void clearClient(dvrClient *clnt)
+{
+int error=0;
+printf("%s:%d\n", __FUNCTION__, __LINE__);
+// Being done to cleanup the existing client.
+H264_DVR_CloseAlarmChan(clnt->loginId);
+H264_DVR_Logout(clnt->loginId);
+}
+
+int daemonize_1()
 {
 int fd;
 int read_fd;
 FILE *pidfile=NULL;
+char buffer[64] = {0};
+
+int pid=fork();
+
+if (pid<0) exit(1); /* fork error */
+
+if (pid>0) exit(0); /* parent exits */
 
 if ((dvrgconf.dvr_sid=setsid()) < 0) {
 	printf("daemonize failed to set sid\n");
 	return EFAILURE;
 }
-
+#if 1
 if((fd = access(DVR_LOCK_FILE, F_OK|W_OK)) == ESUCCESS) {
 	if ( EFAILURE!= (read_fd = open ( DVR_LOCK_FILE , O_RDONLY )) )
 	{
-	   char buffer[64] = {0};
 	   struct stat file_info = {0};
 	   int length = 0;
                 /* Get information about the file.  */
@@ -106,7 +156,6 @@ if((fd = access(DVR_LOCK_FILE, F_OK|W_OK)) == ESUCCESS) {
 	  }
 	}
 }
-
 	if (NULL ==(pidfile = fopen(DVR_LOCK_FILE, "w"))) {
 	    	printf( "Cannot open file %s", DVR_LOCK_FILE );
 	    	return EFAILURE;
@@ -131,6 +180,7 @@ if((fd = access(DVR_LOCK_FILE, F_OK|W_OK)) == ESUCCESS) {
           printf("Could not redirect stdout, stderr, stdin - proceeding nontheless\n");
         }
 
+#endif
 return ESUCCESS;
 }
 
@@ -159,6 +209,7 @@ while (!g_stopPing) {
 			tmpdvr=gdvrList;
 	}
 	if (tmpdvr->delEntry) {
+		pthread_mutex_lock(&gdvrlistaddmutex);
 		if(tmpdvr == gdvrList) {
 			gdvrList=tmpdvr->next;
 			free(tmpdvr);
@@ -166,6 +217,7 @@ while (!g_stopPing) {
 			prevdvr->next=tmpdvr->next;
 			free(tmpdvr);
 		}
+		pthread_mutex_unlock(&gdvrlistaddmutex);
 	}
 	memset(pingString,0,255);
 	snprintf(pingString, 255, "%s %s %s >> /dev/null", ping, "-w 3", tmpdvr->ipaddress);
@@ -181,6 +233,8 @@ while (!g_stopPing) {
 			flag=1;
 		}
 		if((repeatCounter == 0) && (flag == 1)) {
+			tmpdvr->pingFails++;;
+			if(tmpdvr->pingFails == 1) {
 			// Fill sql table.
 			time_t t=time(NULL);
 			struct tm tt=*localtime(&t);
@@ -196,10 +250,9 @@ while (!g_stopPing) {
 					tt.tm_mon + 1, tt.tm_year + 1900, tt.tm_hour, tt.tm_min, tt.tm_sec, tmpdvr->clientName, ret);
 			printf("insert into %s %s\n", critical_table, str1);
 			insertEntry(critical_table, str1);
-			tmpdvr->pingFails=1;
+			}
 		}
 	} while(repeatCounter);
-	tmpdvr=tmpdvr->next;
 }
 
 }
@@ -229,7 +282,7 @@ while (1) {
 			snprintf(insertrow_general, 511, "%s ('%s','%s','%d','%s')", ALERT_FIELDS, date, time, info->nChannel, "SDK_EVENT_CODE_LOCAL_ALARM");
 			rowno = insertEntry(who->clientName, insertrow_general);
 			snprintf(insertrow_general, 511, "%s ('%s','%s','%d','%s', '%s', '%d')", CRITICAL_FIELDS, date, time, info->nChannel, "SDK_EVENT_CODE_LOCAL_ALARM", who->clientName, rowno);
-			insertEntry(critical_table, insertrow_critical);
+			insertEntry(critical_table, insertrow_general);
 		}
 		else if(who->alert | alert_local_alarm) {
 			snprintf(insertrow_general, 511, "%s ('%s','%s','%d','%s'", ALERT_FIELDS, date, time, info->nChannel, "SDK_EVENT_CODE_LOCAL_ALARM");
@@ -241,7 +294,7 @@ while (1) {
 			snprintf(insertrow_general, 511, "%s ('%s','%s','%d','%s')", ALERT_FIELDS, date, time, info->nChannel, "SDK_EVENT_CODE_NET_ALARM");
 			rowno = insertEntry(who->clientName, insertrow_general);
 			snprintf(insertrow_general, 511, "%s ('%s','%s','%d','%s', '%s', '%d')", CRITICAL_FIELDS, date, time, info->nChannel, "SDK_EVENT_CODE_NET_ALARM", who->clientName, rowno);
-			insertEntry(critical_table, insertrow_critical);
+			insertEntry(critical_table, insertrow_general);
 		}
 		else if(who->alert | alert_net_alarm) {
 			snprintf(insertrow_general, 511, "%s ('%s','%s','%d','%s'", ALERT_FIELDS, date, time, info->nChannel, "SDK_EVENT_CODE_NET_ALARM");
@@ -253,7 +306,7 @@ while (1) {
 			snprintf(insertrow_general, 511, "%s ('%s','%s','%d','%s')", ALERT_FIELDS, date, time, info->nChannel, "SDK_EVENT_CODE_MANUAL_ALARM");
 			rowno = insertEntry(who->clientName, insertrow_general);
 			snprintf(insertrow_general, 511, "%s ('%s','%s','%d','%s', '%s', '%d')", CRITICAL_FIELDS, date, time, info->nChannel, "SDK_EVENT_CODE_MANUAL_ALARM", who->clientName, rowno);
-			insertEntry(critical_table, insertrow_critical);
+			insertEntry(critical_table, insertrow_general);
 		}
 		else if(who->alert | alert_manual_alarm){
 			snprintf(insertrow_general, 511, "%s ('%s','%s','%d','%s'", ALERT_FIELDS, date, time, info->nChannel, "SDK_EVENT_CODE_MANUAL_ALARM");
@@ -265,7 +318,7 @@ while (1) {
 			snprintf(insertrow_general, 511, "%s ('%s','%s','%d','%s')", ALERT_FIELDS, date, time, info->nChannel, "SDK_EVENT_CODE_VIDEO_MOTION");
 			rowno = insertEntry(who->clientName, insertrow_general);
 			snprintf(insertrow_general, 511, "%s ('%s','%s','%d','%s', '%s', '%d')", CRITICAL_FIELDS, date, time, info->nChannel, "SDK_EVENT_CODE_VIDEO_MOTION", who->clientName, rowno);
-			insertEntry(critical_table, insertrow_critical);
+			insertEntry(critical_table, insertrow_general);
 		}
 		else if(who->alert | alert_video_motion){
 			snprintf(insertrow_general, 511, "%s ('%s','%s','%d','%s'", ALERT_FIELDS, date, time, info->nChannel, "SDK_EVENT_CODE_VIDEO_MOTION");
@@ -277,7 +330,7 @@ while (1) {
 			snprintf(insertrow_general, 511, "%s ('%s','%s','%d','%s')", ALERT_FIELDS, date, time, info->nChannel, "SDK_EVENT_CODE_VIDEO_LOSS");
 			rowno = insertEntry(who->clientName, insertrow_general);
 			snprintf(insertrow_general, 511, "%s ('%s','%s','%d','%s', '%s', '%d')", CRITICAL_FIELDS, date, time, info->nChannel, "SDK_EVENT_CODE_VIDEO_LOSS", who->clientName, rowno);
-			insertEntry(critical_table, insertrow_critical);
+			insertEntry(critical_table, insertrow_general);
 		}
 		else if(who->alert | alert_video_loss) {
 			snprintf(insertrow_general, 511, "%s ('%s','%s','%d','%s'", ALERT_FIELDS, date, time, info->nChannel, "SDK_EVENT_CODE_VIDEO_LOSS");
@@ -289,7 +342,7 @@ while (1) {
 			snprintf(insertrow_general, 511, "%s ('%s','%s','%d','%s')", ALERT_FIELDS, date, time, info->nChannel, "SDK_EVENT_CODE_VIDEO_BLIND");
 			rowno = insertEntry(who->clientName, insertrow_general);
 			snprintf(insertrow_general, 511, "%s ('%s','%s','%d','%s', '%s', '%d')", CRITICAL_FIELDS, date, time, info->nChannel, "SDK_EVENT_CODE_VIDEO_BLIND", who->clientName, rowno);
-			insertEntry(critical_table, insertrow_critical);
+			insertEntry(critical_table, insertrow_general);
 		}
 		else if(who->alert | alert_video_blind) {
 			snprintf(insertrow_general, 511, "%s ('%s','%s','%d','%s'", ALERT_FIELDS, date, time, info->nChannel, "SDK_EVENT_CODE_VIDEO_BLIND");
@@ -301,7 +354,7 @@ while (1) {
 			snprintf(insertrow_general, 511, "%s ('%s','%s','%d','%s')", ALERT_FIELDS, date, time, info->nChannel, "SDK_EVENT_CODE_VIDEO_TITLE");
 			rowno = insertEntry(who->clientName, insertrow_general);
 			snprintf(insertrow_general, 511, "%s ('%s','%s','%d','%s', '%s', '%d')", CRITICAL_FIELDS, date, time, info->nChannel, "SDK_EVENT_CODE_VIDEO_TITLE", who->clientName, rowno);
-			insertEntry(critical_table, insertrow_critical);
+			insertEntry(critical_table, insertrow_general);
 		}
 		else if(who->alert | alert_video_title) {
 			snprintf(insertrow_general, 511, "%s ('%s','%s','%d','%s'", ALERT_FIELDS, date, time, info->nChannel, "SDK_EVENT_CODE_VIDEO_TITLE");
@@ -313,7 +366,7 @@ while (1) {
 			snprintf(insertrow_general, 511, "%s ('%s','%s','%d','%s')", ALERT_FIELDS, date, time, info->nChannel, "SDK_EVENT_CODE_VIDEO_SPLIT");
 			rowno = insertEntry(who->clientName, insertrow_general);
 			snprintf(insertrow_general, 511, "%s ('%s','%s','%d','%s', '%s', '%d')", CRITICAL_FIELDS, date, time, info->nChannel, "SDK_EVENT_CODE_VIDEO_SPLIT", who->clientName, rowno);
-			insertEntry(critical_table, insertrow_critical);
+			insertEntry(critical_table, insertrow_general);
 		}
 		else if(who->alert | alert_video_split) {
 			snprintf(insertrow_general, 511, "%s ('%s','%s','%d','%s'", ALERT_FIELDS, date, time, info->nChannel, "SDK_EVENT_CODE_VIDEO_SPLIT");
@@ -325,7 +378,7 @@ while (1) {
 			snprintf(insertrow_general, 511, "%s ('%s','%s','%d','%s')", ALERT_FIELDS, date, time, info->nChannel, "SDK_EVENT_CODE_VIDEO_TOUR");
 			rowno = insertEntry(who->clientName, insertrow_general);
 			snprintf(insertrow_general, 511, "%s ('%s','%s','%d','%s', '%s', '%d')", CRITICAL_FIELDS, date, time, info->nChannel, "SDK_EVENT_CODE_VIDEO_TOUR", who->clientName, rowno);
-			insertEntry(critical_table, insertrow_critical);
+			insertEntry(critical_table, insertrow_general);
 		}
 		else if(who->alert | alert_video_tour) {
 			snprintf(insertrow_general, 511, "%s ('%s','%s','%d','%s'", ALERT_FIELDS, date, time, info->nChannel, "SDK_EVENT_CODE_VIDEO_TOUR");
@@ -337,7 +390,7 @@ while (1) {
 			snprintf(insertrow_general, 511, "%s ('%s','%s','%d','%s')", ALERT_FIELDS, date, time, info->nChannel, "SDK_EVENT_CODE_STORAGE_NOT_EXIST");
 			rowno = insertEntry(who->clientName, insertrow_general);
 			snprintf(insertrow_general, 511, "%s ('%s','%s','%d','%s', '%s', '%d')", CRITICAL_FIELDS, date, time, info->nChannel, "SDK_EVENT_CODE_STORAGE_NOT_EXIST", who->clientName, rowno);
-			insertEntry(critical_table, insertrow_critical);
+			insertEntry(critical_table, insertrow_general);
 		}
 		else if(who->alert | alert_storage_not_exist) {
 			snprintf(insertrow_general, 511, "%s ('%s','%s','%d','%s'", ALERT_FIELDS, date, time, info->nChannel, "SDK_EVENT_CODE_STORAGE_NOT_EXIST");
@@ -349,7 +402,7 @@ while (1) {
 			snprintf(insertrow_general, 511, "%s ('%s','%s','%d','%s')", ALERT_FIELDS, date, time, info->nChannel, "SDK_EVENT_CODE_STORAGE_FAILURE");
 			rowno = insertEntry(who->clientName, insertrow_general);
 			snprintf(insertrow_general, 511, "%s ('%s','%s','%d','%s', '%s', '%d')", CRITICAL_FIELDS, date, time, info->nChannel, "SDK_EVENT_CODE_STORAGE_FAILURE", who->clientName, rowno);
-			insertEntry(critical_table, insertrow_critical);
+			insertEntry(critical_table, insertrow_general);
 		}
 		else if(who->alert | alert_storage_failure) {
 			snprintf(insertrow_general, 511, "%s ('%s','%s','%d','%s'", ALERT_FIELDS, date, time, info->nChannel, "SDK_EVENT_CODE_STORAGE_FAILURE");
@@ -361,7 +414,7 @@ while (1) {
 			snprintf(insertrow_general, 511, "%s ('%s','%s','%d','%s')", ALERT_FIELDS, date, time, info->nChannel, "SDK_EVENT_CODE_LOW_SPACE");
 			rowno = insertEntry(who->clientName, insertrow_general);
 			snprintf(insertrow_general, 511, "%s ('%s','%s','%d','%s', '%s', '%d')", CRITICAL_FIELDS, date, time, info->nChannel, "SDK_EVENT_CODE_LOW_SPACE", who->clientName, rowno);
-			insertEntry(critical_table, insertrow_critical);
+			insertEntry(critical_table, insertrow_general);
 		}
 		else if(who->alert | alert_low_space) {
 			snprintf(insertrow_general, 511, "%s ('%s','%s','%d','%s'", ALERT_FIELDS, date, time, info->nChannel, "SDK_EVENT_CODE_LOW_SPACE");
@@ -373,7 +426,7 @@ while (1) {
 			snprintf(insertrow_general, 511, "%s ('%s','%s','%d','%s')", ALERT_FIELDS, date, time, info->nChannel, "SDK_EVENT_CODE_NET_ABORT");
 			rowno = insertEntry(who->clientName, insertrow_general);
 			snprintf(insertrow_general, 511, "%s ('%s','%s','%d','%s', '%s', '%d')", CRITICAL_FIELDS, date, time, info->nChannel, "SDK_EVENT_CODE_NET_ABORT", who->clientName, rowno);
-			insertEntry(critical_table, insertrow_critical);
+			insertEntry(critical_table, insertrow_general);
 		}
 		else if(who->alert | alert_net_abort) {
 			snprintf(insertrow_general, 511, "%s ('%s','%s','%d','%s'", ALERT_FIELDS, date, time, info->nChannel, "SDK_EVENT_CODE_NET_ABORT");
@@ -385,7 +438,7 @@ while (1) {
 			snprintf(insertrow_general, 511, "%s ('%s','%s','%d','%s')", ALERT_FIELDS, date, time, info->nChannel, "SDK_EVENT_CODE_COMM");
 			rowno = insertEntry(who->clientName, insertrow_general);
 			snprintf(insertrow_general, 511, "%s ('%s','%s','%d','%s', '%s', '%d')", CRITICAL_FIELDS, date, time, info->nChannel, "SDK_EVENT_CODE_COMM", who->clientName, rowno);
-			insertEntry(critical_table, insertrow_critical);
+			insertEntry(critical_table, insertrow_general);
 		}
 		else if(who->alert | alert_comm) {
 			snprintf(insertrow_general, 511, "%s ('%s','%s','%d','%s'", ALERT_FIELDS, date, time, info->nChannel, "SDK_EVENT_CODE_COMM");
@@ -397,7 +450,7 @@ while (1) {
 			snprintf(insertrow_general, 511, "%s ('%s','%s','%d','%s')", ALERT_FIELDS, date, time, info->nChannel, "SDK_EVENT_CODE_STORAGE_READ_ERROR");
 			rowno = insertEntry(who->clientName, insertrow_general);
 			snprintf(insertrow_general, 511, "%s ('%s','%s','%d','%s', '%s', '%d')", CRITICAL_FIELDS, date, time, info->nChannel, "SDK_EVENT_CODE_STORAGE_READ_ERROR", who->clientName, rowno);
-			insertEntry(critical_table, insertrow_critical);
+			insertEntry(critical_table, insertrow_general);
 		}
 		else if(who->alert | alert_storage_read_error) {
 			snprintf(insertrow_general, 511, "%s ('%s','%s','%d','%s'", ALERT_FIELDS, date, time, info->nChannel, "SDK_EVENT_CODE_STORAGE_READ_ERROR");
@@ -409,7 +462,7 @@ while (1) {
 			snprintf(insertrow_general, 511, "%s ('%s','%s','%d','%s')", ALERT_FIELDS, date, time, info->nChannel, "SDK_EVENT_CODE_STORAGE_WRITE_ERROR");
 			rowno = insertEntry(who->clientName, insertrow_general);
 			snprintf(insertrow_general, 511, "%s ('%s','%s','%d','%s', '%s', '%d')", CRITICAL_FIELDS, date, time, info->nChannel, "SDK_EVENT_CODE_STORAGE_WRITE_ERROR", who->clientName, rowno);
-			insertEntry(critical_table, insertrow_critical);
+			insertEntry(critical_table, insertrow_general);
 		}
 		else if(who->alert | alert_storage_write_error){
 			snprintf(insertrow_general, 511, "%s ('%s','%s','%d','%s'", ALERT_FIELDS, date, time, info->nChannel, "SDK_EVENT_CODE_STORAGE_WRITE_ERROR");
@@ -421,7 +474,7 @@ while (1) {
 			snprintf(insertrow_general, 511, "%s ('%s','%s','%d','%s')", ALERT_FIELDS, date, time, info->nChannel, "SDK_EVENT_CODE_NET_IPCONFLICT");
 			rowno = insertEntry(who->clientName, insertrow_general);
 			snprintf(insertrow_general, 511, "%s ('%s','%s','%d','%s', '%s', '%d')", CRITICAL_FIELDS, date, time, info->nChannel, "SDK_EVENT_CODE_NET_IPCONFLICT", who->clientName, rowno);
-			insertEntry(critical_table, insertrow_critical);
+			insertEntry(critical_table, insertrow_general);
 		}
 		else if(who->alert | alert_net_ipconflict){
 			snprintf(insertrow_general, 511, "%s ('%s','%s','%d','%s'", ALERT_FIELDS, date, time, info->nChannel, "SDK_EVENT_CODE_NET_IPCONFLICT");
@@ -433,7 +486,7 @@ while (1) {
 			snprintf(insertrow_general, 511, "%s ('%s','%s','%d','%s')", ALERT_FIELDS, date, time, info->nChannel, "SDK_EVENT_CODE_ALARM_EMERGENCY");
 			rowno = insertEntry(who->clientName, insertrow_general);
 			snprintf(insertrow_general, 511, "%s ('%s','%s','%d','%s', '%s', '%d')", CRITICAL_FIELDS, date, time, info->nChannel, "SDK_EVENT_CODE_ALARM_EMERGENCY", who->clientName, rowno);
-			insertEntry(critical_table, insertrow_critical);
+			insertEntry(critical_table, insertrow_general);
 		}
 		else if(who->alert | alert_alarm_emergency){
 			snprintf(insertrow_general, 511, "%s ('%s','%s','%d','%s'", ALERT_FIELDS, date, time, info->nChannel, "SDK_EVENT_CODE_ALARM_EMERGENCY");
@@ -445,7 +498,7 @@ while (1) {
 			snprintf(insertrow_general, 511, "%s ('%s','%s','%d','%s')", ALERT_FIELDS, date, time, info->nChannel, "SDK_EVENT_CODE_DEC_CONNECT");
 			rowno = insertEntry(who->clientName, insertrow_general);
 			snprintf(insertrow_general, 511, "%s ('%s','%s','%d','%s', '%s', '%d')", CRITICAL_FIELDS, date, time, info->nChannel, "SDK_EVENT_CODE_DEC_CONNECT", who->clientName, rowno);
-			insertEntry(critical_table, insertrow_critical);
+			insertEntry(critical_table, insertrow_general);
 		}
 		else if(who->alert | alert_dec_connect) {
 			snprintf(insertrow_general, 511, "%s ('%s','%s','%d','%s'", ALERT_FIELDS, date, time, info->nChannel, "SDK_EVENT_CODE_DEC_CONNECT");
@@ -457,7 +510,7 @@ while (1) {
 			snprintf(insertrow_general, 511, "%s ('%s','%s','%d','%s')", ALERT_FIELDS, date, time, info->nChannel, "SDK_EVENT_CODE_VideoAnalyze");
 			rowno = insertEntry(who->clientName, insertrow_general);
 			snprintf(insertrow_general, 511, "%s ('%s','%s','%d','%s', '%s', '%d')", CRITICAL_FIELDS, date, time, info->nChannel, "SDK_EVENT_CODE_VideoAnalyze", who->clientName, rowno);
-			insertEntry(critical_table, insertrow_critical);
+			insertEntry(critical_table, insertrow_general);
 		}
 		else if(who->alert | alert_videoanalyze){
 			snprintf(insertrow_general, 511, "%s ('%s','%s','%d','%s'", ALERT_FIELDS, date, time, info->nChannel, "SDK_EVENT_CODE_VideoAnalyze");
@@ -478,15 +531,26 @@ void * pollconf(void *)
 int confCount=0;
 dvrchangeconf *confHead = NULL;
 dvrchangeconf *nodetofree = NULL;
+dvrClient *tmp=NULL;
 while (1) {
 	if((confCount=readChangeConf(&confHead)) != 0) {
-printf("%s:%d\n", __FUNCTION__, __LINE__);
 		while(confCount > 0) {
-printf("%s:%d\n", __FUNCTION__, __LINE__);
 			if (confHead->type == REFRESH_IP) {
 printf("%s:%d ipaddress : %s\n", __FUNCTION__, __LINE__,confHead->confEntry.alterconf.ipaddr);
-				// Case for locking
-				readDB_updateConf(confHead->confEntry.alterconf.ipaddr);
+				if( confHead->confEntry.alterconf.action == DELETE) {
+					tmp = findbyipaddress(confHead->confEntry.alterconf.ipaddr);
+					if(tmp) {
+						clearClient(tmp);
+						tmp->delEntry = 1;
+					}
+				} else {
+					// Case for locking
+					readDB_updateConf(confHead->confEntry.alterconf.ipaddr);
+					tmp = findbyipaddress(confHead->confEntry.alterconf.ipaddr);
+					if(tmp) {
+						initClient(tmp);
+					}
+				}
 			} else if (confHead->type == DOWNLOAD) {
 				//Not implemented.
 			}
@@ -522,37 +586,6 @@ printf("%s:%d t=%d, f=%d\n", __FUNCTION__, __LINE__, true, false);
 return true;
 }
 
-void initClient(dvrClient *clnt)
-{
-int error=0;
-printf("%s:%d\n", __FUNCTION__, __LINE__);
-	if(clnt->loginId) {
-	// Being done to cleanup the existing client.
-		H264_DVR_CloseAlarmChan(clnt->loginId);
-		H264_DVR_Logout(clnt->loginId);
-	}
-printf("%s:%d clnt->ipaddress : %s, clnt->port : %d, clnt->userName : %s, clnt->password : %s\n", __FUNCTION__, __LINE__, clnt->ipaddress, clnt->port, clnt->userName, clnt->password);
-
-	clnt->loginId=H264_DVR_LoginEx((char *)clnt->ipaddress, (int)clnt->port, (char *)clnt->userName, (char *)""/*clnt->password*/, &clnt->devInfo, 6, &error);
-printf("%s:%d\n", __FUNCTION__, __LINE__);
-	if (clnt->loginId <= 0) {
-printf("%s:%d Login Id : %d\n", __FUNCTION__, __LINE__, clnt->loginId);
-			time_t t=time(NULL);
-			struct tm tt=*localtime(&t);
-			char str[256];
-			char str1[512];
-			snprintf(str, 255, "%s ('%d-%d-%d', '%d:%d:%d', -1, 'Unable to login')", ALERT_FIELDS, tt.tm_mday, 
-					tt.tm_mon + 1, tt.tm_year + 1900, tt.tm_hour, tt.tm_min, tt.tm_sec);
-			long ret=insertEntry(clnt->clientName, str);
-			snprintf(str1, 255, "%s ('%d-%d-%d', '%d:%d:%d', -1, 'Unable to login', %s, '%d')", CRITICAL_FIELDS, tt.tm_mday, 
-					tt.tm_mon + 1, tt.tm_year + 1900, tt.tm_hour, tt.tm_min, tt.tm_sec, clnt->clientName, ret);
-			insertEntry(critical_table, str1);
-	} else {
-printf("%s:%d\n", __FUNCTION__, __LINE__);
-		H264_DVR_SetDVRMessCallBack(alarmCallBack, clnt->loginId);
-		H264_DVR_SetupAlarmChan(clnt->loginId);
-	}
-}
 
 dvrClient * findbyloginid(long int loginid) {
 dvrClient *tmp = gdvrList;
@@ -566,10 +599,8 @@ return NULL;
 
 dvrClient * findbyipaddress(char *ipaddress) {
 dvrClient *tmp = gdvrList;
-unsigned int ip_num;
-inet_aton(ipaddress, (struct in_addr *)&ip_num);
 	while(tmp != NULL) {
-		if(tmp->ipaddr == ip_num)
+		if((strncmp(tmp->ipaddress, ipaddress, strlen(ipaddress))) == 0)
 			return tmp;
 		tmp=tmp->next;
 	}
@@ -593,11 +624,11 @@ int main()
 pthread_t ping_thread;
 pthread_t processAlarm_thread;
 pthread_t pollconf_thread;
-/*
-	if(daemonize != 0) {
+#if 1
+	if(daemonize_1() != ESUCCESS) {
 		return EFAILURE;
 	}
-*/
+#endif
 printf("%s:%d\n", __FUNCTION__, __LINE__);
 	if (ESUCCESS != readXmlConf(DVR_XML_CONF_FILE)) {
 		return EFAILURE;
