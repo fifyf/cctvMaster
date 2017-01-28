@@ -497,7 +497,28 @@ if(res) {
 					telt->type=UPDATE_TIME;
 					break;
 				case 2:
+					strncpy(telt->confEntry.timeconf.ipaddr, row[field_count], strlen(row[field_count]));
+					break;
+				case 3:
 					telt->confEntry.timeconf.isSystemTime = atoi(row[field_count]);
+					break;
+				case 4:
+					telt->confEntry.timeconf.dd = atoi(row[field_count]);
+					break;
+				case 5:
+					telt->confEntry.timeconf.mm = atoi(row[field_count]);
+					break;
+				case 6:
+					telt->confEntry.timeconf.yy = atoi(row[field_count]);
+					break;
+				case 7:
+					telt->confEntry.timeconf.dd = atoi(row[field_count]);
+					break;
+				case 8:
+					telt->confEntry.timeconf.min = atoi(row[field_count]);
+					break;
+				case 9:
+					telt->confEntry.timeconf.sec = atoi(row[field_count]);
 					break;
 				default:
 					break;

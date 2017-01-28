@@ -577,6 +577,33 @@ sleep(10);
 }
 }
 
+int updateDvrTime(updatetimeconf *conf)
+{
+SDK_SYSTEM_TIME setTime;
+dvrClient *tmpdvr=NULL;
+memset(&setTime, 0, sizeof(SDK_SYSTEM_TIME));
+if ((tmpdvr=findbyipaddress(conf->ipaddr)) != NULL) {
+	if(conf->isSystemTime == 0) {
+		time_t t=time(NULL);
+		struct tm tt=*localtime(&t);
+		setTime.day=tt.tm_mday;
+		setTime.month=tt.tm_mon + 1;
+		setTime.year=tt.tm_year + 1900;
+		setTime.hour=tt.tm_hour;
+		setTime.minute=tt.tm_min;
+		setTime.second=tt.tm_sec;
+	} else {
+		setTime.year=conf->yy;
+		setTime.month=conf->mm;
+		setTime.day=conf->dd;
+		setTime.hour=conf->hh;
+		setTime.minute=conf->min;
+		setTime.second=conf->sec;
+	}
+}
+H264_DVR_SetSystemDateTime(tmpdvr->loginId, &setTime);
+}
+
 void * pollconf(void *)
 {
 int confCount=0;
@@ -612,6 +639,7 @@ printf("%s:%d ipaddress : %s\n", __FUNCTION__, __LINE__,confHead->confEntry.alte
 				ghddunlocked=0;
 				}
 			} else if (confHead->type == UPDATE_TIME) {
+				updateDvrTime((updatetimeconf *)&confHead->confEntry);
 			}
 			nodetofree = confHead;
 			confHead=confHead->next;

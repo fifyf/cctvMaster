@@ -80,7 +80,15 @@ UPDATE_TIME
 }confType;
 
 typedef struct updatetimeconf {
+char ipaddr[16];
 char isSystemTime; // 0 for system time
+int dd;
+int mm;
+int yy;
+int hh;
+int min;
+int sec;
+
 }updatetimeconf;
 
 typedef struct hddinfoconf {
