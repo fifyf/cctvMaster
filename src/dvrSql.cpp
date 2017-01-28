@@ -518,6 +518,20 @@ mysqlStatus = mysql_query(gconn, delete_query);
 return retval;
 }
 
+int deleteAllEntries(char *table)
+{
+int mysqlStatus;
+char completeEntry[256];
+memset(completeEntry, 0, 256);
+
+snprintf(completeEntry, 256, "delete * from %s", table);
+	if((mysqlStatus = mysql_query(gconn, completeEntry)) != 0) {
+		return -1;
+	} else {
+		return 0;
+	}
+}
+
 int insertEntry(char *table, char *entry)
 {
 int mysqlStatus;

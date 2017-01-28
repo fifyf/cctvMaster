@@ -20,6 +20,7 @@
 
 #define ALERT_FIELDS "(n_date, n_time, ch_id, message) values"
 #define CRITICAL_FIELDS "(n_date, n_time, ch_id, message, client_name, alert_id) values"
+#define HDD_INFO_FIELDS "(clientName, diskCount, disk_id, disk_physical_no, disk_part_no, disk_driver_type, isDiskCurrent, totalSpace, remainingSpace) values"
 
 char *critical_table="critical";
 
@@ -531,26 +532,51 @@ while (1) {
 void * hddconf(void *)
 {
 dvrClient *tmpdvr=NULL;
-dvrClient *prevdvr=NULL;
+char insEntry[1024];
+int itr1, itr2;
+int diskcount=0;
+struct SDK_StorageDeviceInformationAll lpOutBuf;
 while(1) {
-if(ghddunlocked) {
-	if(gdvrList == NULL)
-		pthread_mutex_lock(&gdvrlistmutex);
-		
-	if(tmpdvr==NULL) {
-		prevdvr=tmpdvr;
+	if(ghddunlocked) {
+		deleteAllEntries(hddtable);
 		tmpdvr=gdvrList;
-	} else {
-		prevdvr=tmpdvr;
-		if(tmpdvr->next)
-			tmpdvr=tmpdvr->next;
+		while (tmpdvr != NULL) {
+		memset(&lpOutBuf, 0, sizeof(struct SDK_StorageDeviceInformationAll));
+		diskcount=0;
+		H264_DVR_GetDevConfig(tmpdvr->loginId, E_SDK_CONFIG_DISK_INFO, 0, 
+		(char *)&lpOutBuf, sizeof(struct SDK_StorageDeviceInformationAll), 500);
+		for(itr1=0;itr1<SDK_MAX_DISK_PER_MACHINE;itr1++) {
+		if(lpOutBuf.vStorageDeviceInfoAll[itr1].iPhysicalNo || lpOutBuf.vStorageDeviceInfoAll[itr1].iPartNumber)
+			;
 		else
-			tmpdvr=gdvrList;
+			break;
+		for(itr2=0;itr2<SDK_MAX_DRIVER_PER_DISK;itr2++) {
+		if(lpOutBuf.vStorageDeviceInfoAll[itr1].diPartitions[itr2].uiTotalSpace) {
+/* clientName, diskCount, disk_id, disk_physical_no, disk_part_no, disk_driver_type, isDiskCurrent, totalSpace, remainingSpace */
+		diskcount++;
+		memset(insEntry, 0, 1024);
+		snprintf(insEntry, 1024, "%s (%s, %d, %d, %d, %d, %d, %d, %d, %d)", 
+		HDD_INFO_FIELDS, tmpdvr->clientName, diskcount, lpOutBuf.iDiskNumber, 
+		lpOutBuf.vStorageDeviceInfoAll[itr1].iPhysicalNo, 
+		lpOutBuf.vStorageDeviceInfoAll[itr1].iPartNumber, 
+		lpOutBuf.vStorageDeviceInfoAll[itr1].diPartitions[itr2].iDriverType, 
+		lpOutBuf.vStorageDeviceInfoAll[itr1].diPartitions[itr2].bIsCurrent, 
+		lpOutBuf.vStorageDeviceInfoAll[itr1].diPartitions[itr2].uiTotalSpace,
+		lpOutBuf.vStorageDeviceInfoAll[itr1].diPartitions[itr2].uiRemainSpace
+		);
+		insertEntry(hddtable, insEntry);
+		} else
+			break;
+		}
+		}
+		tmpdvr=tmpdvr->next;
+		}
+	ghddunlocked=0;
 	}
-}
 sleep(10);
 }
 }
+
 void * pollconf(void *)
 {
 int confCount=0;
@@ -657,6 +683,7 @@ int main()
 pthread_t ping_thread;
 pthread_t processAlarm_thread;
 pthread_t pollconf_thread;
+pthread_t hddconf_thread;
 #if 1
 	if(daemonize_1() != ESUCCESS) {
 		return EFAILURE;
@@ -677,6 +704,10 @@ printf("%s:%d\n", __FUNCTION__, __LINE__);
 	}
 printf("%s:%d\n", __FUNCTION__, __LINE__);
 	if (pthread_create(&ping_thread, (pthread_attr_t *)NULL, ping_routine, (void *)NULL) != 0) {
+		return EFAILURE;
+	}
+printf("%s:%d\n", __FUNCTION__, __LINE__);
+	if (pthread_create(&hddconf_thread, (pthread_attr_t *)NULL, hddconf, (void *)NULL) != 0) {
 		return EFAILURE;
 	}
 printf("%s:%d\n", __FUNCTION__, __LINE__);
