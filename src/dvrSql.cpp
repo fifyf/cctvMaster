@@ -467,6 +467,43 @@ if(res) {
 				}
 				field_count++;
 				}
+			} else if(strncmp(row[1], "HDD_MONITOR", strlen("HDD_MONITOR"))) {
+				while(field_count < mysql_field_count(gconn)) {
+				switch(field_count) {
+				case 0:
+					rowend=atoi(row[field_count]);
+					break;
+				case 1:
+					telt->type=HDDINFO;
+					break;
+				case 2:
+					strncpy(telt->confEntry.hddinfoconf.ipaddr, row[field_count], strlen(row[field_count]));
+					break;
+				case 3:
+					telt->confEntry.hddinfoconf.enable = atoi(row[field_count]);
+					break;
+				default:
+					break;
+				}
+				field_count++;
+				}
+			} else if(strncmp(row[1], "UPDATE_TIME", strlen("UPDATE_TIME"))) {
+				while(field_count < mysql_field_count(gconn)) {
+				switch(field_count) {
+				case 0:
+					rowend=atoi(row[field_count]);
+					break;
+				case 1:
+					telt->type=UPDATE_TIME;
+					break;
+				case 2:
+					telt->confEntry.timeconf.isSystemTime = atoi(row[field_count]);
+					break;
+				default:
+					break;
+				}
+				field_count++;
+				}
 			}
 		telt->next=*confHead;
 		*confHead=telt;

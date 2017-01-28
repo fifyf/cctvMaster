@@ -74,8 +74,19 @@ typedef struct dvrClient{
 
 typedef enum confType {
 REFRESH_IP=1,
-DOWNLOAD
+DOWNLOAD,
+HDDINFO,
+UPDATE_TIME
 }confType;
+
+typedef struct updatetimeconf {
+char isSystemTime; // 0 for system time
+}updatetimeconf;
+
+typedef struct hddinfoconf {
+char ipaddr[16];
+char enable; // enable=1 disable=0
+}hddinfoconf;
 
 typedef struct downloadconf {
 char ipaddr[16];
@@ -98,6 +109,8 @@ confaction action;
 typedef union changeconf {
 new_or_modifyconf alterconf;
 downloadconf download;
+hddinfoconf hddinfoconf;
+updatetimeconf timeconf;
 }changeconf;
 
 typedef struct dvrchangeconf {

@@ -37,6 +37,8 @@ pthread_mutex_t alarmmutex=PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t gdvrlistmutex=PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t gdvrlistaddmutex=PTHREAD_MUTEX_INITIALIZER;
 
+int ghddunlocked=0;
+
 typedef struct alarmList {
 holdAlarm *head;
 holdAlarm *tail;
@@ -526,6 +528,29 @@ while (1) {
 }
 }
 
+void * hddconf(void *)
+{
+dvrClient *tmpdvr=NULL;
+dvrClient *prevdvr=NULL;
+while(1) {
+if(ghddunlocked) {
+	if(gdvrList == NULL)
+		pthread_mutex_lock(&gdvrlistmutex);
+		
+	if(tmpdvr==NULL) {
+		prevdvr=tmpdvr;
+		tmpdvr=gdvrList;
+	} else {
+		prevdvr=tmpdvr;
+		if(tmpdvr->next)
+			tmpdvr=tmpdvr->next;
+		else
+			tmpdvr=gdvrList;
+	}
+}
+sleep(10);
+}
+}
 void * pollconf(void *)
 {
 int confCount=0;
@@ -553,6 +578,14 @@ printf("%s:%d ipaddress : %s\n", __FUNCTION__, __LINE__,confHead->confEntry.alte
 				}
 			} else if (confHead->type == DOWNLOAD) {
 				//Not implemented.
+			} else if (confHead->type == HDDINFO) {
+				if(confHead->confEntry.hddinfoconf.enable) {
+				ghddunlocked=1;
+				}
+				else {
+				ghddunlocked=0;
+				}
+			} else if (confHead->type == UPDATE_TIME) {
 			}
 			nodetofree = confHead;
 			confHead=confHead->next;
@@ -668,3 +701,4 @@ printf("%s:%d\n", __FUNCTION__, __LINE__);
 		sleep(3);
 	}
 }
+
